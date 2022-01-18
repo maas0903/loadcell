@@ -1,0 +1,7 @@
+.pio/
+.vs/
+.vscode/
+Code HX711 and Loadcell/
+HX711/
+### Credentials ###
+include/credentials.h
