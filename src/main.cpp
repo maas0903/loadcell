@@ -47,6 +47,8 @@ void loop()
     if (Serial.available())
     {
         char temp = Serial.read();
+        delay(2);
+        Serial.print(temp);
         if (temp == '+' || temp == 'q')
             calibration_factor += 10;
         else if (temp == '-' || temp == 'w')
