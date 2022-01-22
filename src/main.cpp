@@ -27,11 +27,13 @@ void setup()
     long zero_factor = scale.read_average(); //Get a baseline reading
     Serial.print("Zero factor: ");           //This can be used to remove the need to tare the scale. Useful in permanent scale projects.
     Serial.println(zero_factor);
+    calibration_factor = -1500.00;
 }
 
 //=============================================================================================
 //                         LOOP
 //=============================================================================================
+
 void loop()
 {
 
@@ -39,7 +41,7 @@ void loop()
 
     Serial.print("Reading: ");
     Serial.print(scale.get_units(), 3);
-    Serial.print(" kg"); //Change this to kg and re-adjust the calibration factor if you follow SI units like a sane person
+    Serial.print(" g"); //Change this to kg and re-adjust the calibration factor if you follow SI units like a sane person
     Serial.print(" calibration_factor: ");
     Serial.print(calibration_factor);
     Serial.println();
@@ -50,7 +52,7 @@ void loop()
         delay(2);
         Serial.print(temp);
         if (temp == '+' || temp == 'q')
-            calibration_factor += 10;
+            calibration_factor += 1;
         else if (temp == '-' || temp == 'w')
             calibration_factor -= 1;
         else if (temp == 's')
