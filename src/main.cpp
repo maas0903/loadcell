@@ -40,7 +40,7 @@ void loop()
         }*/
         reading = reading * 0.035274;
 
-        if (reading != lastReading)
+        if ((reading > lastReading + 1) or (reading < lastReading - 1))
         {
             Serial.print("Weight: ");
             Serial.println(reading);
