@@ -1,5 +1,7 @@
-#include <HX711.h> //You must have this library in your arduino library folder
+#include <HX711.h>
 #include <Pushbutton.h>
+//#include <Adafruit_GFX.h>
+//#include <Adafruit_SSD1306.h>
 
 #define CLK 22
 #define DOUT 23
@@ -10,14 +12,14 @@ HX711 scale;
 int reading;
 int lastReading;
 
-float Calibration_Factor_Of_Load_cell = -8.1;
+float Calibration_Factor_Of_Load_cell = 8.1;
 
 void setup()
 {
     Serial.begin(115200);
     scale.begin(DOUT, CLK);
     scale.set_scale(Calibration_Factor_Of_Load_cell);
-    scale.tare(); // Reset scale to 0
+    scale.tare();
     Serial.println("starting");
 }
 
