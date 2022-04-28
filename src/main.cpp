@@ -1,173 +1,111 @@
-#include <WiFi.h>
-#include <WebServer.h>
-
-#include <stdio.h>
-#include <ArduinoJson.h>
-#include <Arduino.h>
-
-#include <credentials.h>
 #include <HX711.h>
+#include <Pushbutton.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
-const int LOADCELL_DOUT_PIN = 23;
-const int LOADCELL_SCK_PIN = 22;
+//#define CLK 22
+#define CLK 5
+#define DOUT 23
 
-#define DEC_POINT 2
-#define STABLE 1
+#define BUTTON_PIN 19
+Pushbutton button(BUTTON_PIN);
 
 HX711 scale;
+int reading;
+int lastReading;
 
-//#define DEBUG
-IPAddress staticIP(192, 168, 63, 57);
-String hostName = "skaal";
-#define URI "/skaal"
-IPAddress gateway(192, 168, 63, 1);
-IPAddress subnet(255, 255, 255, 0);
-IPAddress dns(192, 168, 63, 21);
-IPAddress dnsGoogle(8, 8, 8, 8);
+float Calibration_Factor_Of_Load_cell = 8.1;
 
-#define HTTP_REST_PORT 80
-#define WIFI_RETRY_DELAY 500
-#define MAX_WIFI_INIT_RETRY 50
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-#define LED_0 0
-
-WebServer http_rest_server(HTTP_REST_PORT);
-
-void BlinkNTimes(int pin, int blinks, unsigned long millies)
+void setup()
 {
-    digitalWrite(pin, LOW);
-    for (int i = 0; i < blinks; i++)
-    {
-        digitalWrite(pin, HIGH);
-        delay(millies);
-        digitalWrite(pin, LOW);
-        delay(millies);
+    Serial.begin(115200);
+    scale.begin(DOUT, CLK);
+    scale.set_scale(Calibration_Factor_Of_Load_cell);
+    scale.tare();
+    Serial.println("starting");
+
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+    { // Address 0x3D for 128x64
+        Serial.println(F("SSD1306 allocation failed"));
+        for (;;)
+            ;
     }
+    delay(2000);
+    display.clearDisplay();
+
+    display.setTextSize(2);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 17);
+    display.println("Starting");
+    display.display();
+    delay(3000);
+    display.clearDisplay();
+    display.setCursor(10, 17);
+    display.println("Ready");
+    display.display();
 }
 
-void get_skaal()
+void loop()
 {
-}
-
-void config_rest_server_routing()
-{
-    http_rest_server.on("/", HTTP_GET, []()
-                        { http_rest_server.send(200, "text/html",
-                                                "Welcome to the ESP8266 REST Web Server: " + hostName); });
-    http_rest_server.on(URI, HTTP_GET, get_skaal);
-}
-
-void init_wifi()
-{
-    int retries = 0;
-
-    Serial.println("Connecting to WiFi");
-
-    WiFi.config(staticIP, gateway, subnet, dns, dnsGoogle);
-    WiFi.mode(WIFI_STA);
-    WiFi.hostname(hostName);
-    WiFi.begin(ssid, password);
-
-    while ((WiFi.status() != WL_CONNECTED) && (retries < MAX_WIFI_INIT_RETRY))
+    if (button.getSingleDebouncedPress())
     {
-        retries++;
-        delay(WIFI_RETRY_DELAY);
-        Serial.print("#");
+        Serial.print("tare...");
+        scale.tare();
     }
-    Serial.println();
 
-    if (WiFi.status() == WL_CONNECTED)
+    delay(200);
+
+    if (scale.wait_ready_timeout(200))
     {
-        Serial.print("Connected to ");
-        Serial.print(ssid);
-        Serial.print("--- IP: ");
-        Serial.println(WiFi.localIP());
-        BlinkNTimes(LED_0, 3, 500);
+        reading = round(scale.get_units());
+
+        reading = reading * 0.035274; // ounce to gram
+
+        if ((reading > lastReading + 1) or (reading < lastReading - 1))
+        {
+            Serial.print("Weight: ");
+            Serial.println(reading);
+
+            display.clearDisplay();
+            display.setCursor(0, 17);
+            display.print(String(reading) + "g");
+            display.display();
+            // delay(3000);
+        }
+        lastReading = reading;
     }
     else
     {
-        Serial.print("Error connecting to: ");
-        Serial.println(ssid);
+        Serial.println("HX711 not found.");
     }
-}
 
-void setupSkaal()
-{
-    Serial.println("Initializing the scale");
+    /*Serial.print("Reading: ");
+    U = scale.get_units();
+    if (U < 0)
+    {
+        U = 0.00;
+    }
+    O = U * 0.035274;
+    Serial.print(O);
+    Serial.print(" grams");
+    Serial.print(" Calibration_Factor_Of_Load_cell: ");
+    Serial.print(Calibration_Factor_Of_Load_cell);
+    Serial.println();
 
-    // Initialize library with data output pin, clock input pin and gain factor.
-    // Channel selection is made by passing the appropriate gain:
-    // - With a gain factor of 64 or 128, channel A is selected
-    // - With a gain factor of 32, channel B is selected
-    // By omitting the gain factor parameter, the library
-    // default "128" (Channel A) is used here.
-    scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-
-    Serial.println("Before setting up the scale:");
-    Serial.print("read: \t\t");
-    Serial.println(scale.read()); // print a raw reading from the ADC
-
-    Serial.print("read average: \t\t");
-    Serial.println(scale.read_average(20)); // print the average of 20 readings from the ADC
-
-    Serial.print("get value: \t\t");
-    Serial.println(scale.get_value(5)); // print the average of 5 readings from the ADC minus the tare weight (not set yet)
-
-    Serial.print("get units: \t\t");
-    Serial.println(scale.get_units(5), 1); // print the average of 5 readings from the ADC minus tare weight (not set) divided
-                                           // by the SCALE parameter (not set yet)
-
-    scale.set_scale(-1505.f); // this value is obtained by calibrating the scale with known weights; see the README for details
-    scale.tare();             // reset the scale to 0
-
-    Serial.println("After setting up the scale:");
-
-    Serial.print("read: \t\t");
-    Serial.println(scale.read()); // print a raw reading from the ADC
-
-    Serial.print("read average: \t\t");
-    Serial.println(scale.read_average(20)); // print the average of 20 readings from the ADC
-
-    Serial.print("get value: \t\t");
-    Serial.println(scale.get_value(5)); // print the average of 5 readings from the ADC minus the tare weight, set with tare()
-
-    Serial.print("get units: \t\t");
-    Serial.println(scale.get_units(5), 1); // print the average of 5 readings from the ADC minus tare weight, divided
-                                           // by the SCALE parameter set with set_scale
-
-    Serial.println("Readings:");
-}
-
-void resetInit()
-{
-    init_wifi();
-    delay(200);
-
-    config_rest_server_routing();
-    delay(200);
-    http_rest_server.begin();
-
-    Serial.println("HTTP REST Server Started");
-
-    setupSkaal();
-}
-
-void setup(void)
-{
-    Serial.begin(115200);
-    resetInit();
-}
-
-void loop(void)
-{
-    http_rest_server.handleClient();
-
-    Serial.print("one reading:\t");
-    Serial.print(scale.get_units(), 1);
-    Serial.print("\t| average:\t");
-    Serial.println(scale.get_units(10), 1);
-
-    //scale.power_down(); // put the ADC in sleep mode
-    delay(2000);
-    //scale.power_up();
+    if (Serial.available())
+    {
+        char temp = Serial.read();
+        delay(2);
+        if (temp == '+' || temp == 'a')
+            Calibration_Factor_Of_Load_cell += 0.5;
+        else if (temp == '-' || temp == 'z')
+            Calibration_Factor_Of_Load_cell -= 0.5;
+    }
+    */
 }
